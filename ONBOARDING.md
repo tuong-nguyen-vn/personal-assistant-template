@@ -8,6 +8,18 @@
 You are building **one directory** that will become the user's assistant. When you are
 done, the user opens a session there and the assistant is live under the name they chose.
 
+## Three directories — keep them straight
+
+The setup involves three distinct folders. Do not confuse them:
+
+| Folder | What it is | Who creates it | Lifetime |
+|---|---|---|---|
+| **clone** (staging) | your local clone of this template repo, used only to run `scaffold.sh` | you clone it before Step 2 | delete after install, or keep to pull updates later |
+| **dest** (assistant config) | the folder the assistant *lives in* — holds `identity.md`, `AGENTS.md`, skills, `projects/` | created by `scaffold.sh` in Step 2 | permanent — this is what the user opens a session in |
+| **tracked projects** | the user's real codebases the assistant *manages* | already exist on disk; you just list them in `dest/projects/INDEX.md` | permanent, independent of the assistant |
+
+The user's question "where should it live?" is always asking about **dest**.
+
 ## How to run the interview
 
 Ask the questions below **in batches**, not all at once. Group A first; once you have the
@@ -114,26 +126,39 @@ default listed with the question.
    one-line description, and path for each. These seed `projects/INDEX.md`.
    - If none yet, the index stays at one row (the assistant's own config) — that's fine.
 
-10. **Destination.** Where should the config live?
-    - Default: `~/projects/<slug>/` (e.g. `~/projects/mina/`).
-    - Confirm before creating. Create the directory if it does not exist.
+10. **Destination.** Where should the assistant config live? (This is the **dest**
+    folder — the assistant's own home, not any of the user's code projects. The assistant
+    will track other projects *from inside it*.)
+    - Default: `~/projects/<slug>/` (e.g. `~/projects/mina/`). Good default — colocated
+      with the user's other projects, named after the assistant.
+    - Confirm the path with the user before creating. Create it if it does not exist.
+    - If `$dest` already exists and is non-empty, **stop and ask** — never overwrite an
+      existing config.
 
 ---
 
 ## Step 2 — Scaffold
 
-1. Copy `template/` to the destination, **excluding** the Herdr skill if `USES_HERDR=false`:
+1. **Clone this template repo** into a staging location (not `$dest`). This is the
+   **clone** folder from the table above — temporary, used only to run the installer.
    ```bash
-   dest="<destination>"
-   mkdir -p "$dest"
-   # either run the helper:
-   ./scaffold.sh "$dest" $([ "$USES_HERDR" = false ] && echo --no-herdr)
-   # …or copy manually: cp -r template/* "$dest"/ and cp -r template/.agents "$dest"/
+   git clone <this repo url> /tmp/personal-assistant-template
+   cd /tmp/personal-assistant-template
    ```
-   `scaffold.sh` refuses to overwrite an existing non-empty destination — confirm with the
-   user before deleting anything.
+   (You may already be running from a clone the user made; if so, reuse it — do not
+   re-clone.)
 
-2. Fill the placeholders. For each file under `$dest`, replace the `{{TOKENS}}`:
+2. **Run the scaffold** into `$dest`, choosing flags from the interview:
+   ```bash
+   dest="<destination from Q10>"
+   ./scaffold.sh "$dest" \
+     $([ "$USES_HERDR" = false ] && echo --no-herdr) \
+     $([ "$CODING_COORDINATOR" = false ] && echo --no-coding)
+   ```
+   `scaffold.sh` refuses to overwrite a non-empty destination — that is the safety net;
+   never defeat it with `rm -rf` on the dest.
+
+3. **Fill the placeholders.** For each file under `$dest`, replace the `{{TOKENS}}`:
 
    | Token | Source |
    |---|---|
@@ -148,15 +173,28 @@ default listed with the question.
    | `{{#USES_HERDR}}…{{/USES_HERDR}}` | keep the block if Q6=yes, delete the whole block (incl. markers) if no |
    | `{{#CODING_COORDINATOR}}…{{/CODING_COORDINATOR}}` | keep if Q2=Coding Coordinator, delete the whole block (incl. markers) otherwise |
 
+4. **Optional: version-control the dest.** Offer to `git init` the assistant's config
+   folder so the user can track changes to identity/rules/skills over time. Default to
+   yes, but ask first — some users keep it out of git. Do **not** push it anywhere
+   without explicit permission.
+   ```bash
+   git -C "$dest" init && git -C "$dest" add -A && git -C "$dest" commit -m "init assistant"
+   ```
+
+5. **Fill the Herdr skill config (if installed).** If `USES_HERDR=true`, fill
+   `$dest/.agents/skills/herdr-orchestrator/references/models.config.md` from Q7/Q8:
+   real provider table, the `--model` value per canonical model, which `--kind`
+   integration is installed, and which defaults you routed. Then strip the
+   `<!-- CONFIG -->` banners from the skill files you touched.
+
+6. **Leave the clone or clean it up.** Either keep the staging clone (so the user can
+   `git pull` template updates later and re-run `scaffold.sh`) or delete it. State which
+   you did and where, so the user can find it again.
+
    `{{MODEL_DEFAULTS_SUMMARY}}` example:
    > Sonnet 5 by default, GLM-5.2 if Sonnet is out of quota; Opus 5 only for genuinely
    > hard work. Gemini 3.6 Flash for review, image analysis, and codebase discovery — not
    > implementation.
-
-3. If `USES_HERDR=true`, fill `template/.agents/skills/herdr-orchestrator/references/models.config.md`
-   from Q7/Q8: real provider table, the `--model` value per canonical model, which
-   `--kind` integration is installed, and which defaults you routed. Then strip the
-   `<!-- CONFIG -->` banners from the skill files you touched.
 
 ---
 
