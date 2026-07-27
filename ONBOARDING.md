@@ -128,12 +128,18 @@ default listed with the question.
 
 10. **Destination.** Where should the assistant config live? (This is the **dest**
     folder — the assistant's own home, not any of the user's code projects. The assistant
-    will track other projects *from inside it*.)
-    - Default: `~/projects/<slug>/` (e.g. `~/projects/mina/`). Good default — colocated
-      with the user's other projects, named after the assistant.
-    - Confirm the path with the user before creating. Create it if it does not exist.
-    - If `$dest` already exists and is non-empty, **stop and ask** — never overwrite an
-      existing config.
+    will track other projects *from inside it*.) **Ask the user; do not pick for them.**
+    Offer the options, in this order:
+    - **Right here** — in the current working directory. If they pick this, ask whether
+      they want it as `./<slug>/` (a subfolder named after the assistant) or directly in
+      `./` (the current dir becomes the assistant's home).
+    - **A path they name** — anywhere they want: `~/projects/<slug>`, `~/assistants/kai`,
+      `~/code/personal/juno`, an absolute path, whatever. Do not steer them toward any
+      one convention.
+    - Whatever they choose is `$dest`. Do **not** default to `~/projects/<slug>/` unless
+      the user explicitly says so.
+    Create the directory if it does not exist. If `$dest` already exists and is
+    non-empty, **stop and ask** — never overwrite an existing config.
 
 ---
 
