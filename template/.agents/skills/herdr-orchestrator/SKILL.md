@@ -60,7 +60,7 @@ Names match `[a-z][a-z0-9_-]{0,31}`, must be unique among live agents, and are r
 4. **Create a tab for the batch.** Its root pane is your first lane; split inside that tab for the rest. Never split into the pane you are talking to the user in.
 5. **Start agents** into panes sitting at a shell prompt → load `references/main-agent-launch.md`.
 6. **Prompt** each lane with a self-contained brief including its ownership boundary.
-7. **Wait and read** → load `references/monitoring.md`.
+7. **Wait and read** → load `references/monitoring.md`. For >1 lane prefer `bin/wait-any` (event-driven, order-independent) over serial `agent wait`.
 8. **Report** one table, with each lane's name so the user can attach. Verify claims before repeating them.
 9. **Close the batch tab** once every lane is summarized.
 
@@ -87,7 +87,7 @@ herdr agent read reviewer --source visible --lines 40
 
 Terminal output is unbounded; your context is not. This section is why this skill exists.
 
-- **Wait, never poll.** `agent wait` blocks on state. Reading in a loop burns context for nothing.
+- **Wait, never poll.** `agent wait` blocks on state; `bin/wait-any` blocks on events for several lanes at once. Reading in a loop burns context for nothing.
 - **Read only the pane that changed**, never all panes.
 - **Start at `--lines 40` on `--source visible`.** If scrollback is empty on your setup (pi on the alternate screen), `--lines` tails the current screen — an answer longer than one screenful is unrecoverable. Ask for short answers, do not raise `--lines` and hope.
 - **Ask for short answers in the prompt.** Cheaper than reading long ones.

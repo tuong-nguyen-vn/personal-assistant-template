@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+"""wait-any — block until any of N Herdr agent panes reaches a settled state.
+
+Native event-driven replacement for serial `herdr agent wait`. Subscribes to
+`pane.agent_status_changed` for every lane on ONE socket connection and prints
+each lane as it settles, in finish order. Zero polling.
+
+Usage:
+  wait-any [--timeout-ms MS] [--no-seed] PANE_ID [PANE_ID ...]
+  wait-any --self-test
+
+--no-seed: ignore lanes already settled at startup; only report lanes that
+settle via a live status-change event. Useful when you know all lanes are
+working and want to hear only about completions.
+
+Settled = idle | done | blocked (matches `herdr agent wait` defaults).
+Output: one line per settled lane, tab-separated:  pane_id<TAB>status<TAB>name
+Exit: 0 when all lanes settled; 124 on timeout; 2 on usage; 3 on socket error.
+
+Talks directly to the Herdr socket (newline-delimited JSON-RPC). The CLI does
+not yet expose events as a user command, so this calls the socket directly.
+
+Why two connections: after `events.subscribe` the socket becomes a push stream
+and no further RPC requests are accepted on it (server resets). So subscribe
+runs on the long-lived stream socket, and the seed snapshot runs on a separate
+short-lived connection. Subscribing before snapshotting closes the race: any
+change after subscribe is delivered on the stream regardless of seed timing.
+"""
+import json, os, socket, sys, time
+
+SOCK = os.environ.get("HERDR_SOCKET_PATH", os.path.expanduser("~/.config/herdr/herdr.sock"))
+SETTLED = {"idle", "done", "blocked"}
+DEFAULT_TIMEOUT_MS = 1_800_000  # 30 min
+
+
+def die(code, msg):
+    sys.stderr.write(msg.rstrip() + "\n")
+    sys.exit(code)
+
+
+def usage():
+    die(2, __doc__)
+
+
+class LineReader:
+    def __init__(self, sock):
+        self.sock = sock
+        self.buf = b""
+
+    def readline(self, deadline):
+        """Next JSON message, or None on timeout / closed connection."""
+        while b"\n" not in self.buf:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                return None
+            self.sock.settimeout(remaining)
+            try:
+                chunk = self.sock.recv(65536)
+            except socket.timeout:
+                return None
+            if not chunk:
+                return None
+            self.buf += chunk
+        line, self.buf = self.buf.split(b"\n", 1)
+        return json.loads(line.decode()) if line.strip() else None
+
+
+def call(sock, obj):
+    sock.sendall((json.dumps(obj) + "\n").encode())
+
+
+def handle_event(msg, pending):
+    if msg.get("event") != "pane.agent_status_changed":
+        return
+    d = msg.get("data", {})
+    p, st = d.get("pane_id"), d.get("agent_status")
+    if p in pending and st in SETTLED:
+        emit(p, st, d.get("agent"))
+        pending.discard(p)
+
+
+def emit(pane_id, status, name=None):
+    sys.stdout.write(f"{pane_id}\t{status}\t{name or ''}\n")
+    sys.stdout.flush()
+
+
+def open_sock():
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.connect(SOCK)
+        return s
+    except OSError as e:
+        die(3, f"wait-any: cannot connect to {SOCK}: {e}")
+
+
+def seed_statuses(panes):
+    """Return {pane_id: (status, agent_name)} for recognized agents, via a
+    throwaway connection so the subscription stream socket stays clean."""
+    s = open_sock()
+    reader = LineReader(s)
+    call(s, {"id": "seed", "method": "session.snapshot", "params": {}})
+    msg = reader.readline(time.time() + 5)
+    s.close()
+    if msg is None:
+        die(3, "wait-any: snapshot connection closed")
+    if msg.get("error"):
+        die(3, f"wait-any: snapshot failed: {msg['error']}")
+    out = {}
+    for a in msg.get("result", {}).get("snapshot", {}).get("agents", []):
+        p = a.get("pane_id")
+        if p in panes:
+            out[p] = (a.get("agent_status", "unknown"), a.get("agent"))
+    return out
+
+
+def self_test():
+    s = open_sock()
+    call(s, {"id": "t", "method": "ping", "params": {}})
+    msg = LineReader(s).readline(time.time() + 3)
+    if not msg or msg.get("result", {}).get("type") != "pong":
+        die(3, "wait-any: self-test ping failed")
+    print("wait-any: socket ok, protocol", msg["result"].get("protocol"))
+    s.close()
+    sys.exit(0)
+
+
+def main(argv):
+    if not argv:
+        usage()
+    if argv[0] in ("-h", "--help"):
+        usage()
+    if argv[0] == "--self-test":
+        self_test()
+
+    timeout_ms = DEFAULT_TIMEOUT_MS
+    no_seed = False
+    panes = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--timeout-ms":
+            if i + 1 >= len(argv):
+                usage()
+            timeout_ms = int(argv[i + 1]); i += 2; continue
+        if a.startswith("--timeout-ms="):
+            timeout_ms = int(a.split("=", 1)[1]); i += 1; continue
+        if a == "--no-seed":
+            no_seed = True; i += 1; continue
+        panes.append(a); i += 1
+    if not panes:
+        usage()
+
+    paneset = set(panes)
+    deadline = time.time() + timeout_ms / 1000.0
+    pending = set(panes)
+    out_order = {p: n for n, p in enumerate(panes)}  # stable order for timeout msg
+
+    # 1) Subscribe first on the long-lived stream socket.
+    sock = open_sock()
+    reader = LineReader(sock)
+    subs = [{"type": "pane.agent_status_changed", "pane_id": p} for p in panes]
+    call(sock, {"id": "sub", "method": "events.subscribe",
+                "params": {"subscriptions": subs}})
+    while True:
+        msg = reader.readline(deadline)
+        if msg is None:
+            die(3, "wait-any: connection closed before subscribe ack")
+        if msg.get("id") == "sub":
+            if msg.get("error"):
+                die(3, f"wait-any: subscribe rejected: {msg['error']}")
+            break
+        handle_event(msg, pending)  # event arrived before the ack
+
+    # 2) Seed from snapshot (separate connection). Subscribe-then-snapshot makes
+    #    this race-free: anything that settles after subscribe is on the stream.
+    if not no_seed:
+        for p, (st, name) in seed_statuses(paneset).items():
+            if p in pending and st in SETTLED:
+                emit(p, st, name); pending.discard(p)
+
+    # 3) Stream: emit each remaining lane as it settles.
+    while pending:
+        msg = reader.readline(deadline)
+        if msg is None:
+            for p in sorted(pending, key=lambda x: out_order[x]):
+                sys.stderr.write(f"wait-any: timed out, still pending: {p}\n")
+            sock.close()
+            sys.exit(124)
+        handle_event(msg, pending)
+
+    sock.close()
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

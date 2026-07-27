@@ -23,9 +23,22 @@ Blocks until that agent settles. No `--until` matches `idle`/`done`/`blocked`. N
 
 `done` decays to `idle` once the tab is focused. Reading via CLI does not mark it seen, so the distinction survives your reads.
 
-## Sequencing several lanes
+## Waiting on several lanes — wait-any, not serial
 
-Wait on each in turn. They run in parallel regardless; you are just choosing your own read order.
+`agent wait` takes a single target. Waiting 1→2→3 in turn is blind to lane 3 if it finishes first — you're blocked on lane 1 and notice lane 3 late.
+
+Use `bin/wait-any` instead. It subscribes to `pane.agent_status_changed` for every lane on one socket connection and prints each lane **as it settles, in finish order** — order-independent, zero polling. It talks to the Herdr socket directly (newline-delimited JSON-RPC); the CLI does not yet expose events as a user command, so the script calls the socket itself.
+
+```bash
+# print each lane in finish order, one per line: pane_id<TAB>status<TAB>name
+bin/wait-any --timeout-ms 600000 "$pane_api" "$pane_ui" "$pane_review"
+```
+
+Each line is a lane settling (idle/done/blocked). Handle them in arrival order: read → verify → summarize the first finisher, then re-run for the rest (or let one call run to collect all of them). Exit 0 = all lanes settled; 124 = timeout with the still-pending panes named on stderr.
+
+`--no-seed` skips lanes already settled at startup — use it when you know every lane is working and want to hear only about live completions.
+
+**Fallback** if `wait-any` is unavailable: serial `agent wait` works, just slower to react:
 
 ```bash
 for a in api ui review; do
@@ -34,7 +47,7 @@ for a in api ui review; do
 done
 ```
 
-Handle the first one that blocks before waiting on the rest — a blocked agent is burning wall-clock while you wait on someone else.
+Handle a `blocked` lane as soon as you see it — it is burning wall-clock while others run.
 
 ## Reading, cheaply
 
