@@ -52,12 +52,19 @@ Lifecycle states: `working` · `idle` · `blocked` · `done` · `unknown`.
 
 Names match `[a-z][a-z0-9_-]{0,31}`, must be unique among live agents, and are released when the agent exits. `agent wait`/`read`/`get` accept a name or a pane ID; **sending input needs the pane ID**, because it goes through `pane send-text`. Keep both for every lane.
 
+## Scoping — one task, one agent, one space
+
+- **One agent per task, one task per agent.** Work a task inside a single agent/session until it's done. A new, independent task gets a fresh scope — either `/new` a session in the same pane or start a new agent — never keep piling unrelated tasks onto one agent's context. Just as important the other way: don't fragment one task across many agents either — split lanes only when the work is genuinely parallel and independent, not by default.
+- **One Herdr space per project.** Reuse the project's existing space if one already matches (check `herdr workspace list` first); only create a new space when none fits.
+- **Tabs split work streams inside that space** (e.g. an HRM tab and an Attendance tab inside the ERP space), not new spaces.
+- **Cap panes per task at 2–4.** If a task needs more parallelism than that, it's really multiple tasks — split into separate tabs/sessions instead of stacking panes.
+
 ## Workflow
 
 1. Guardrail check.
-2. **Plan lanes** so no two agents write the same files → load `references/batch.md`.
+2. **Plan lanes** so no two agents write the same files → load `references/batch.md`. Keep the batch within the pane cap above.
 3. **Pick a model per lane** → load `references/model-routing.md`. Use `references/models.config.md` for the `provider/id` strings available on this machine.
-4. **Create a tab for the batch.** Its root pane is your first lane; split inside that tab for the rest. Never split into the pane you are talking to the user in.
+4. **Reuse the project's space; create a tab for the batch inside it.** Its root pane is your first lane; split inside that tab for the rest. Never split into the pane you are talking to the user in.
 5. **Start agents** into panes sitting at a shell prompt → load `references/main-agent-launch.md`.
 6. **Prompt** each lane with a self-contained brief including its ownership boundary.
 7. **Wait and read** → load `references/monitoring.md`. For >1 lane prefer `bin/wait-any` (event-driven, order-independent) over serial `agent wait`.
