@@ -62,14 +62,15 @@ Names match `[a-z][a-z0-9_-]{0,31}`, must be unique among live agents, and are r
 ## Workflow
 
 1. Guardrail check.
-2. **Plan lanes** so no two agents write the same files → load `references/batch.md`. Keep the batch within the pane cap above.
-3. **Pick a model per lane** → load `references/model-routing.md`. Use `references/models.config.md` for the `provider/id` strings available on this machine.
-4. **Reuse the project's space; create a tab for the batch inside it.** Its root pane is your first lane; split inside that tab for the rest. Never split into the pane you are talking to the user in.
-5. **Start agents** into panes sitting at a shell prompt → load `references/main-agent-launch.md`.
-6. **Prompt** each lane with a self-contained brief including its ownership boundary.
-7. **Wait and read** → load `references/monitoring.md`. For >1 lane prefer `bin/wait-any` (event-driven, order-independent) over serial `agent wait`.
-8. **Report** one table, with each lane's name so the user can attach. Verify claims before repeating them.
-9. **Close the batch tab** once every lane is summarized.
+2. **Survey the project's space.** Before planning, read what is already there: `workspace list` → find the project's space → `tab list` → `pane list` → `pane read` on non-agent panes whose cwd is deep in the project (likely dev servers; `agent_status: unknown`). Note what is running, what is idle, and any errors visible on screen. This is the operational context you feed into lane prompts — don't plan blind.
+3. **Plan lanes** so no two agents write the same files → load `references/batch.md`. Keep the batch within the pane cap above.
+4. **Pick a model per lane** → load `references/model-routing.md`. Use `references/models.config.md` for the `provider/id` strings available on this machine.
+5. **Reuse the project's space; create a tab for the batch inside it.** Its root pane is your first lane; split inside that tab for the rest. Never split into the pane you are talking to the user in.
+6. **Start agents** into panes sitting at a shell prompt → load `references/main-agent-launch.md`.
+7. **Prompt** each lane with a self-contained brief including its ownership boundary.
+8. **Wait and read** → load `references/monitoring.md`. For >1 lane prefer `bin/wait-any` (event-driven, order-independent) over serial `agent wait`.
+9. **Report** one table, with each lane's name so the user can attach. Verify claims before repeating them.
+10. **Close the batch tab** once every lane is summarized.
 
 Minimal end-to-end (illustrative — replace `--kind` and the agent flags with those of
 the CLI the user routes the lane through):
