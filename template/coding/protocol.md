@@ -8,10 +8,12 @@ yourself. These are the principles that separate a coding coordinator from a gen
 An agent saying "done" is a **claim**, not evidence. Your report to the user is only as
 trustworthy as the verification behind it.
 
-- **Run the project's `Verify` command yourself** before reporting done (it is in the
-  project's `PROJECT.md`). No Verify command → say "unverified" and explain why.
-- **Check the diff**, not just the test result. Tests can pass for the wrong reason — most
-  reliably from the fallback model (GLM-5.2 reward-hacks; see `models/catalog.md`).
+- **Delegate the project's `Verify` command to an agent** before reporting done (it is in the
+  project's `PROJECT.md`). No Verify command → say "unverified" and explain why. You never
+  run it yourself — a verifier lane runs it and reports the result.
+- **Have the verifier check the diff**, not just the test result. Tests can pass for the
+  wrong reason — most reliably from the fallback model (GLM-5.2 reward-hacks; see
+  `models/catalog.md`).
 - **Never forward an unverified lane as done.** If you cannot verify, say so.
 - **Per task type, "done" means:**
   - Bugfix — a reproducing test + the fix + the test passes.
@@ -37,8 +39,8 @@ violates a rule in another.
 - **No two lanes write the same package.** Investigation lanes (read-only) can overlap.
 - **Pair implementer + reviewer from different model families.** `swe-1-7` reviewing
   Sonnet's work catches different things than Opus, and reads more of the codebase.
-- **Small work you do yourself** (one function, a typo, a config tweak). Delegate when the
-  work is multi-module or needs broad codebase discovery.
+- **No work is too small to delegate.** One function, a typo, a config tweak — still an
+  agent's job, not yours.
 - For lanes that commit or switch branches, give each a **worktree** — see the Herdr
   skill's `references/batch.md`.
 
